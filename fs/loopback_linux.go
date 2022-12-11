@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 // Copyright 2019 the Go-FUSE Authors. All rights reserved.
@@ -72,17 +73,17 @@ func (n *LoopbackNode) renameExchange(name string, newparent InodeEmbedder, newN
 func (n *LoopbackNode) CopyFileRange(ctx context.Context, fhIn FileHandle,
 	offIn uint64, out *Inode, fhOut FileHandle, offOut uint64,
 	len uint64, flags uint64) (uint32, syscall.Errno) {
-	lfIn, ok := fhIn.(*loopbackFile)
+	lfIn, ok := fhIn.(*LoopbackFile)
 	if !ok {
 		return 0, syscall.ENOTSUP
 	}
-	lfOut, ok := fhOut.(*loopbackFile)
+	lfOut, ok := fhOut.(*LoopbackFile)
 	if !ok {
 		return 0, syscall.ENOTSUP
 	}
 
 	signedOffIn := int64(offIn)
 	signedOffOut := int64(offOut)
-	count, err := unix.CopyFileRange(lfIn.fd, &signedOffIn, lfOut.fd, &signedOffOut, int(len), int(flags))
+	count, err := unix.CopyFileRange(lfIn.Fd, &signedOffIn, lfOut.Fd, &signedOffOut, int(len), int(flags))
 	return uint32(count), ToErrno(err)
 }

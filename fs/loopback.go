@@ -194,9 +194,8 @@ func (n *LoopbackNode) Rename(ctx context.Context, name string, newParent InodeE
 		return n.renameExchange(name, newParent, newName)
 	}
 
-	p1 := filepath.Join(n.path(), name)
+	p1 := filepath.Join(n.path())
 	p2 := filepath.Join(n.RootData.Path, newParent.EmbeddedInode().Path(nil), newName)
-
 	err := syscall.Rename(p1, p2)
 	return ToErrno(err)
 }

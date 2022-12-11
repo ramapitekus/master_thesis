@@ -13,7 +13,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/internal/utimens"
 )
 
-func (f *loopbackFile) Allocate(off uint64, sz uint64, mode uint32) fuse.Status {
+func (f *LoopbackFile) Allocate(off uint64, sz uint64, mode uint32) fuse.Status {
 	// TODO: Handle `mode` parameter.
 
 	// From `man fcntl` on OSX:
@@ -80,7 +80,7 @@ func timeToTimeval(t *time.Time) syscall.Timeval {
 
 // MacOS before High Sierra lacks utimensat() and UTIME_OMIT.
 // We emulate using utimes() and extra GetAttr() calls.
-func (f *loopbackFile) Utimens(a *time.Time, m *time.Time) fuse.Status {
+func (f *LoopbackFile) Utimens(a *time.Time, m *time.Time) fuse.Status {
 	var attr fuse.Attr
 	if a == nil || m == nil {
 		var status fuse.Status

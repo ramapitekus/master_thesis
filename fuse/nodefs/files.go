@@ -95,13 +95,13 @@ func (f *devNullFile) Truncate(size uint64) (code fuse.Status) {
 ////////////////
 
 // LoopbackFile delegates all operations back to an underlying os.File.
-func NewLoopbackFile(f *os.File) File {
-	return &loopbackFile{File: f}
+func NewLoopbackFile(f *os.File, name string) File {
+	return &loopbackFile{File: f, name: name}
 }
 
 type loopbackFile struct {
 	File *os.File
-
+	name string
 	// os.File is not threadsafe. Although fd themselves are
 	// constant during the lifetime of an open file, the OS may
 	// reuse the fd number after it is closed. When open races
@@ -110,18 +110,18 @@ type loopbackFile struct {
 	lock sync.Mutex
 }
 
-func (f *loopbackFile) InnerFile() File {
+func (f *LoopbackFile) InnerFile() File {
 	return nil
 }
 
-func (f *loopbackFile) SetInode(n *Inode) {
+func (f *LoopbackFile) SetInode(n *Inode) {
 }
 
-func (f *loopbackFile) String() string {
+func (f *LoopbackFile) String() string {
 	return fmt.Sprintf("loopbackFile(%s)", f.File.Name())
 }
 
-func (f *loopbackFile) Read(buf []byte, off int64) (res fuse.ReadResult, code fuse.Status) {
+func (f *LoopbackFile) Read(buf []byte, off int64) (res fuse.ReadResult, code fuse.Status) {
 	f.lock.Lock()
 	// This is not racy by virtue of the kernel properly
 	// synchronizing the open/write/close.
@@ -130,20 +130,20 @@ func (f *loopbackFile) Read(buf []byte, off int64) (res fuse.ReadResult, code fu
 	return r, fuse.OK
 }
 
-func (f *loopbackFile) Write(data []byte, off int64) (uint32, fuse.Status) {
+func (f *LoopbackFile) Write(data []byte, off int64) (uint32, fuse.Status) {
 	f.lock.Lock()
 	n, err := f.File.WriteAt(data, off)
 	f.lock.Unlock()
 	return uint32(n), fuse.ToStatus(err)
 }
 
-func (f *loopbackFile) Release() {
+func (f *LoopbackFile) Release() {
 	f.lock.Lock()
 	f.File.Close()
 	f.lock.Unlock()
 }
 
-func (f *loopbackFile) Flush() fuse.Status {
+func (f *LoopbackFile) Flush() fuse.Status {
 	f.lock.Lock()
 
 	// Since Flush() may be called for each dup'd fd, we don't
@@ -159,7 +159,7 @@ func (f *loopbackFile) Flush() fuse.Status {
 	return fuse.ToStatus(err)
 }
 
-func (f *loopbackFile) Fsync(flags int) (code fuse.Status) {
+func (f *LoopbackFile) Fsync(flags int) (code fuse.Status) {
 	f.lock.Lock()
 	r := fuse.ToStatus(syscall.Fsync(int(f.File.Fd())))
 	f.lock.Unlock()
@@ -173,7 +173,7 @@ const (
 	F_OFD_SETLKW = 38
 )
 
-func (f *loopbackFile) GetLk(owner uint64, lk *fuse.FileLock, flags uint32, out *fuse.FileLock) (code fuse.Status) {
+func (f *LoopbackFile) GetLk(owner uint64, lk *fuse.FileLock, flags uint32, out *fuse.FileLock) (code fuse.Status) {
 	flk := syscall.Flock_t{}
 	lk.ToFlockT(&flk)
 	code = fuse.ToStatus(syscall.FcntlFlock(f.File.Fd(), F_OFD_GETLK, &flk))
@@ -181,15 +181,15 @@ func (f *loopbackFile) GetLk(owner uint64, lk *fuse.FileLock, flags uint32, out 
 	return
 }
 
-func (f *loopbackFile) SetLk(owner uint64, lk *fuse.FileLock, flags uint32) (code fuse.Status) {
+func (f *LoopbackFile) SetLk(owner uint64, lk *fuse.FileLock, flags uint32) (code fuse.Status) {
 	return f.setLock(owner, lk, flags, false)
 }
 
-func (f *loopbackFile) SetLkw(owner uint64, lk *fuse.FileLock, flags uint32) (code fuse.Status) {
+func (f *LoopbackFile) SetLkw(owner uint64, lk *fuse.FileLock, flags uint32) (code fuse.Status) {
 	return f.setLock(owner, lk, flags, true)
 }
 
-func (f *loopbackFile) setLock(owner uint64, lk *fuse.FileLock, flags uint32, blocking bool) (code fuse.Status) {
+func (f *LoopbackFile) setLock(owner uint64, lk *fuse.FileLock, flags uint32, blocking bool) (code fuse.Status) {
 	if (flags & fuse.FUSE_LK_FLOCK) != 0 {
 		var op int
 		switch lk.Typ {
@@ -219,7 +219,7 @@ func (f *loopbackFile) setLock(owner uint64, lk *fuse.FileLock, flags uint32, bl
 	}
 }
 
-func (f *loopbackFile) Truncate(size uint64) fuse.Status {
+func (f *LoopbackFile) Truncate(size uint64) fuse.Status {
 	f.lock.Lock()
 	r := fuse.ToStatus(syscall.Ftruncate(int(f.File.Fd()), int64(size)))
 	f.lock.Unlock()
@@ -227,7 +227,7 @@ func (f *loopbackFile) Truncate(size uint64) fuse.Status {
 	return r
 }
 
-func (f *loopbackFile) Chmod(mode uint32) fuse.Status {
+func (f *LoopbackFile) Chmod(mode uint32) fuse.Status {
 	f.lock.Lock()
 	r := fuse.ToStatus(f.File.Chmod(os.FileMode(mode)))
 	f.lock.Unlock()
@@ -235,7 +235,7 @@ func (f *loopbackFile) Chmod(mode uint32) fuse.Status {
 	return r
 }
 
-func (f *loopbackFile) Chown(uid uint32, gid uint32) fuse.Status {
+func (f *LoopbackFile) Chown(uid uint32, gid uint32) fuse.Status {
 	f.lock.Lock()
 	r := fuse.ToStatus(f.File.Chown(int(uid), int(gid)))
 	f.lock.Unlock()
@@ -243,7 +243,7 @@ func (f *loopbackFile) Chown(uid uint32, gid uint32) fuse.Status {
 	return r
 }
 
-func (f *loopbackFile) GetAttr(a *fuse.Attr) fuse.Status {
+func (f *LoopbackFile) GetAttr(a *fuse.Attr) fuse.Status {
 	st := syscall.Stat_t{}
 	f.lock.Lock()
 	err := syscall.Fstat(int(f.File.Fd()), &st)
