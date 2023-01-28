@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -46,6 +47,7 @@ var _ = (fs.FileWriter)((*RenameFile)(nil))
 
 func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
 	f.mu.Lock()
+	GetEntropy(data)
 	defer f.mu.Unlock()
 	var slice []byte
 	n, err := syscall.Pwrite(f.Fd, slice, off)
@@ -97,4 +99,28 @@ func main() {
 	}
 	fmt.Println("Mounted!")
 	server.Wait()
+}
+
+func GetEntropy(data []byte) {
+	possible := make(map[string]int)
+
+	for i := 1; i <= 256; i++ {
+		possible[string(i)] = 0
+	}
+
+	for _, byt := range data {
+		possible[string(byt)] += 1
+	}
+
+	var data_len = len(data)
+	var entropy = 0.0
+
+	for char := range possible {
+		if possible[char] == 0 {
+			continue
+		}
+		var p = float64(possible[char]) / float64(data_len)
+		entropy -= p * math.Log2(p)
+	}
+	fmt.Println(entropy)
 }
