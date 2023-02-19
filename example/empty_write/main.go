@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 type RenameNode struct {
@@ -20,12 +23,36 @@ type RenameNode struct {
 	Name string
 }
 
+type JsonDump struct {
+	Pid     uint32
+	Entropy float64
+	Op      string
+	Ext     string
+}
+
+type JsonRecords struct {
+	JsonDumps []JsonDump `json:"Ops"` 
+}
+
 type RenameFile struct {
 	fs.LoopbackFile
 	mu         sync.Mutex
 	name       string
 	node       *fs.LoopbackNode
 	parentNode *fs.Inode
+}
+
+func DumpOpToJson(ctx context.Context, jsonDump JsonDump) {
+	var jsonRecords JsonRecords
+
+	ff, _ := os.OpenFile("test.json", os.O_CREATE|os.O_WRONLY, 0644)
+	bytes, _ := os.ReadFile("test.json")
+	json.Unmarshal(bytes, &jsonRecords)
+
+	jsonRecords.JsonDumps = append(jsonRecords.JsonDumps, jsonDump)
+	file, _ := json.Marshal(jsonRecords)
+
+	ff.Write([]byte(file))
 }
 
 func NewLoopbackFile(fd int, name string, node *fs.LoopbackNode) fs.FileHandle {
@@ -47,10 +74,22 @@ var _ = (fs.FileWriter)((*RenameFile)(nil))
 
 func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
 	f.mu.Lock()
-	GetEntropy(data)
+	caller, _ := fuse.FromContext(ctx)
+	pid := caller.Pid
+	ext := strings.Split(f.name, ".")[1]
+	entropy := GetEntropy(data)
+
+	jsonDump := JsonDump{
+		Pid:     pid,
+		Entropy: entropy,
+		Op:      "write",
+		Ext:     ext,
+	}
+	DumpOpToJson(ctx, jsonDump)
+
 	defer f.mu.Unlock()
-	var slice []byte
-	n, err := syscall.Pwrite(f.Fd, slice, off)
+	// var slice []byte
+	n, err := syscall.Pwrite(f.Fd, data, off)
 	return uint32(n), fs.ToErrno(err)
 }
 
@@ -73,6 +112,12 @@ func (n *RenameNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, 
 		return nil, 0, fs.ToErrno(err)
 	}
 	lf := NewLoopbackFile(f, n.Name, &n.LoopbackNode)
+	//jsonDump := JsonDump{
+	//	Pid:     pid,
+	//	Entropy: entropy,
+	//	Op:      "open",
+	//	Ext:     "txt",
+	//}
 	return lf, 0, 0
 }
 
@@ -101,7 +146,7 @@ func main() {
 	server.Wait()
 }
 
-func GetEntropy(data []byte) {
+func GetEntropy(data []byte) (entr float64) {
 	possible := make(map[string]int)
 
 	for i := 1; i <= 256; i++ {
@@ -122,5 +167,5 @@ func GetEntropy(data []byte) {
 		var p = float64(possible[char]) / float64(data_len)
 		entropy -= p * math.Log2(p)
 	}
-	fmt.Println(entropy)
+	return entropy
 }
