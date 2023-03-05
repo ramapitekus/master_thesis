@@ -62,6 +62,27 @@ type RenameFile struct {
 //	//ff.Write([]byte(file))
 //}
 
+func setLogFile(num int) {
+	file, err := os.OpenFile(fmt.Sprintf("logfile%d.csv", num), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.SetFlags(0)
+	log.SetOutput(file)
+	log.Println("Pid,Entropy,Op,Ext,Time")
+}
+
+func changeLogFile(){
+	setLogFile(0)
+	interval := time.Duration(20) * time.Second
+	ticker := time.NewTicker(interval)
+	numLog := 1
+	for range ticker.C {
+		setLogFile(numLog)
+		numLog++
+}
+}
+
 func isMalicious() bool {
 	classifier, err := os.ReadFile("classifier.log")
 	if err != nil {
@@ -164,13 +185,7 @@ func (n *RenameNode) path() string {
 //}
 
 func main() {
-	file, err := os.OpenFile("logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.SetFlags(0)
-	log.SetOutput(file)
-	log.Println("Pid,Entropy,Op,Ext,Time")
+	go changeLogFile()
 
 	path := os.Getenv("HOME") + "/Desktop"
 	rootData := &fs.LoopbackRoot{
