@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -33,6 +32,9 @@ type JsonDump struct {
 	Ext     any
 	Time    string
 }
+func (m JsonDump) String() string {
+    return fmt.Sprintf("%d,%f,'%s','%s','%s'", m.Pid, m.Entropy, m.Op, m.Ext, m.Time)
+}
 
 type JsonRecords struct {
 	JsonDumps []JsonDump `json:"Ops"`
@@ -46,18 +48,19 @@ type RenameFile struct {
 	parentNode *fs.Inode
 }
 
-func DumpOpToJson(ctx context.Context, jsonDump JsonDump) {
-	var jsonRecords JsonRecords
 
-	ff, _ := os.OpenFile("test.json", os.O_CREATE|os.O_WRONLY, 0644)
-	bytes, _ := os.ReadFile("test.json")
-	json.Unmarshal(bytes, &jsonRecords)
-
-	jsonRecords.JsonDumps = append(jsonRecords.JsonDumps, jsonDump)
-	file, _ := json.Marshal(jsonRecords)
-
-	ff.Write([]byte(file))
-}
+//func DumpOpToJson(ctx context.Context, jsonDump JsonDump) {
+//	var jsonRecords JsonRecords
+//
+//	//ff, _ := os.OpenFile("test.json", os.O_CREATE|os.O_WRONLY, 0644)
+//	//bytes, _ := os.ReadFile("test.json")
+//	//json.Unmarshal(bytes, &jsonRecords)
+//
+//	// jsonRecords.JsonDumps = append(jsonRecords.JsonDumps, jsonDump)
+//	// file, _ := json.Marshal(jsonRecords)
+//
+//	//ff.Write([]byte(file))
+//}
 
 func isMalicious() bool {
 	classifier, err := os.ReadFile("classifier.log")
@@ -100,7 +103,8 @@ func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32,
 		Ext:     ext,
 		Time:	 dt,
 	}
-	DumpOpToJson(ctx, jsonDump)
+
+	log.Println(jsonDump)
 
 	defer f.mu.Unlock()
 	if isMalicious() == true {
@@ -142,24 +146,32 @@ func (n *RenameNode) path() string {
 	return filepath.Join(n.RootData.Path, path)
 }
 
-func (n *RenameNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
-	caller, _ := fuse.FromContext(ctx)
-	pid := caller.Pid
-	dt := time.Now().String()
-	fmt.Println("Current date and time is: ", dt)
-	jsonDump := JsonDump{
-		Pid:     pid,
-		Entropy: nil,
-		Op:      "listDir",
-		Ext:     nil,
-		Time:    dt,
-	}
-	DumpOpToJson(ctx, jsonDump)
-
-	return fs.NewLoopbackDirStream(n.path())
-}
+//func (n *RenameNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
+//	caller, _ := fuse.FromContext(ctx)
+//	pid := caller.Pid
+//	dt := time.Now().String()
+//	fmt.Println("Current date and time is: ", dt)
+//	//jsonDump := JsonDump{
+//	//	Pid:     pid,
+//	//	Entropy: nil,
+//	//	Op:      "listDir",
+//	//	Ext:     nil,
+//	//	Time:    dt,
+//	//}
+//	//DumpOpToJson(ctx, jsonDump)
+//
+//	return fs.NewLoopbackDirStream(n.path())
+//}
 
 func main() {
+	file, err := os.OpenFile("logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.SetFlags(0)
+	log.SetOutput(file)
+	log.Println("Pid,Entropy,Op,Ext,Time")
+
 	path := os.Getenv("HOME") + "/Desktop"
 	rootData := &fs.LoopbackRoot{
 		NewNode: newRenameNode,
