@@ -27,9 +27,9 @@ type Status int32
 
 type JsonDump struct {
 	Pid     uint32
-	Entropy any
+	Entropy string
 	Op      string
-	Ext     any
+	Ext     string
 	Time    string
 }
 func (m JsonDump) String() string {
@@ -137,6 +137,28 @@ func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32,
 		n, err := syscall.Pwrite(f.Fd, data, off)
 		return uint32(n), fs.ToErrno(err)
 	}
+}
+
+func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.ReadResult, errno syscall.Errno) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	caller, _ := fuse.FromContext(ctx)
+	pid := caller.Pid
+	ext := strings.Split(f.name, ".")[1]
+	dt := time.Now().String()
+
+	jsonDump := JsonDump{
+		Pid:     pid,
+		Entropy: "null",
+		Op:      "read",
+		Ext:     ext,
+		Time:	 dt,
+	}
+
+	log.Println(jsonDump)
+
+	r := fuse.ReadResultFd(uintptr(f.Fd), off, len(buf))
+	return r, fs.OK
 }
 
 func newRenameNode(rootData *fs.LoopbackRoot, _ *fs.Inode, name string, _ *syscall.Stat_t) fs.InodeEmbedder {
