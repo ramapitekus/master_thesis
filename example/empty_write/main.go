@@ -17,6 +17,8 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
+var initialTimestamp = time.Now().Unix()
+
 type RenameNode struct {
 	fs.LoopbackNode
 
@@ -26,15 +28,15 @@ type RenameNode struct {
 type Status int32
 
 type JsonDump struct {
-	Pid     uint32
-	Entropy any
-	Op      string
-	Ext     string
-	Time    string
+	Pid       uint32
+	Entropy   any
+	Op        string
+	Ext       string
+	Timestamp int64
 }
 
 func (m JsonDump) String() string {
-	return fmt.Sprintf("%d,%f,'%s','%s','%s'", m.Pid, m.Entropy, m.Op, m.Ext, m.Time)
+	return fmt.Sprintf("%d,%f,'%s','%s','%s'", m.Pid, m.Entropy, m.Op, m.Ext, m.Timestamp)
 }
 
 type JsonRecords struct {
@@ -49,19 +51,6 @@ type RenameFile struct {
 	parentNode *fs.Inode
 }
 
-//func DumpOpToJson(ctx context.Context, jsonDump JsonDump) {
-//	var jsonRecords JsonRecords
-//
-//	//ff, _ := os.OpenFile("test.json", os.O_CREATE|os.O_WRONLY, 0644)
-//	//bytes, _ := os.ReadFile("test.json")
-//	//json.Unmarshal(bytes, &jsonRecords)
-//
-//	// jsonRecords.JsonDumps = append(jsonRecords.JsonDumps, jsonDump)
-//	// file, _ := json.Marshal(jsonRecords)
-//
-//	//ff.Write([]byte(file))
-//}
-
 func setLogFile(num int) {
 	file, err := os.OpenFile(fmt.Sprintf("./logs/logfile%d.csv", num), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
@@ -69,18 +58,18 @@ func setLogFile(num int) {
 	}
 	log.SetFlags(0)
 	log.SetOutput(file)
-	log.Println("Pid,Entropy,Op,Ext,Time")
+	log.Println("Pid,Entropy,Op,Ext,Timestamp")
 }
 
 func changeLogFile() {
 	setLogFile(0)
-	interval := time.Duration(20) * time.Second
-	ticker := time.NewTicker(interval)
-	numLog := 1
-	for range ticker.C {
-		setLogFile(numLog)
-		numLog++
-	}
+	//interval := time.Duration(20) * time.Second
+	//ticker := time.NewTicker(interval)
+	//numLog := 1
+	//for range ticker.C {
+	//	setLogFile(numLog)
+	//	numLog++
+	//}
 }
 
 func isMalicious() bool {
@@ -115,14 +104,14 @@ func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32,
 	pid := caller.Pid
 	ext := strings.Split(f.name, ".")[1]
 	entropy := GetEntropy(data)
-	dt := time.Now().String()
+	dt := time.Now().Unix() - initialTimestamp
 
 	jsonDump := JsonDump{
-		Pid:     pid,
-		Entropy: entropy,
-		Op:      "write",
-		Ext:     ext,
-		Time:    dt,
+		Pid:       pid,
+		Entropy:   entropy,
+		Op:        "write",
+		Ext:       ext,
+		Timestamp: dt,
 	}
 
 	log.Println(jsonDump)
@@ -145,14 +134,14 @@ func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.
 	caller, _ := fuse.FromContext(ctx)
 	pid := caller.Pid
 	ext := strings.Split(f.name, ".")[1]
-	dt := time.Now().String()
+	dt := time.Now().Unix() - initialTimestamp
 
 	jsonDump := JsonDump{
-		Pid:     pid,
-		Entropy: "null",
-		Op:      "read",
-		Ext:     ext,
-		Time:    dt,
+		Pid:       pid,
+		Entropy:   -1,
+		Op:        "read",
+		Ext:       ext,
+		Timestamp: dt,
 	}
 
 	log.Println(jsonDump)
@@ -190,7 +179,7 @@ func (n *RenameNode) path() string {
 }
 
 func main() {
-	go changeLogFile()
+	changeLogFile()
 
 	path := os.Getenv("HOME") + "/Desktop"
 	rootData := &fs.LoopbackRoot{
