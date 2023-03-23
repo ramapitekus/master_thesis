@@ -17,24 +17,26 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
+var MTDType = "rename"
+var initialTimestamp = time.Now().Unix()
+
 type RenameNode struct {
 	fs.LoopbackNode
-
 	Name string
 }
 
 type Status int32
 
 type JsonDump struct {
-	Pid     uint32
-	Entropy any
-	Op      string
-	Ext     string
-	Time    string
+	Pid       uint32
+	Entropy   any
+	Op        string
+	Ext       string
+	Timestamp int64
 }
 
 func (m JsonDump) String() string {
-	return fmt.Sprintf("%d,%f,'%s','%s','%s'", m.Pid, m.Entropy, m.Op, m.Ext, m.Time)
+	return fmt.Sprintf("%d,%f,%s,%s,%d", m.Pid, m.Entropy, m.Op, m.Ext, m.Timestamp)
 }
 
 type JsonRecords struct {
@@ -49,19 +51,6 @@ type RenameFile struct {
 	parentNode *fs.Inode
 }
 
-//func DumpOpToJson(ctx context.Context, jsonDump JsonDump) {
-//	var jsonRecords JsonRecords
-//
-//	//ff, _ := os.OpenFile("test.json", os.O_CREATE|os.O_WRONLY, 0644)
-//	//bytes, _ := os.ReadFile("test.json")
-//	//json.Unmarshal(bytes, &jsonRecords)
-//
-//	// jsonRecords.JsonDumps = append(jsonRecords.JsonDumps, jsonDump)
-//	// file, _ := json.Marshal(jsonRecords)
-//
-//	//ff.Write([]byte(file))
-//}
-
 func setLogFile(num int) {
 	file, err := os.OpenFile(fmt.Sprintf("./logs/logfile%d.csv", num), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
@@ -69,18 +58,18 @@ func setLogFile(num int) {
 	}
 	log.SetFlags(0)
 	log.SetOutput(file)
-	log.Println("Pid,Entropy,Op,Ext,Time")
+	log.Println("pid,entropy,op,ext,timestamp")
 }
 
 func changeLogFile() {
 	setLogFile(0)
-	interval := time.Duration(20) * time.Second
-	ticker := time.NewTicker(interval)
-	numLog := 1
-	for range ticker.C {
-		setLogFile(numLog)
-		numLog++
-	}
+	//interval := time.Duration(20) * time.Second
+	//ticker := time.NewTicker(interval)
+	//numLog := 1
+	//for range ticker.C {
+	//	setLogFile(numLog)
+	//	numLog++
+	//}
 }
 
 func isMalicious() bool {
@@ -106,8 +95,31 @@ func NewLoopbackFile(fd int, name string, node *fs.LoopbackNode) fs.FileHandle {
 }
 
 var _ = (fs.NodeOpener)((*RenameNode)(nil))
+var _ = (fs.NodeCreater)((*RenameNode)(nil))
 var _ = (fs.FileReader)((*RenameFile)(nil))
 var _ = (fs.FileWriter)((*RenameFile)(nil))
+
+func (n *RenameNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (inode *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+	p := filepath.Join(n.path(), name)
+	flags = flags &^ syscall.O_APPEND
+	fd, err := syscall.Open(p, int(flags)|os.O_CREATE, mode)
+	if err != nil {
+		return nil, nil, 0, fs.ToErrno(err)
+	}
+	n.PreserveOwner(ctx, p)
+	st := syscall.Stat_t{}
+	if err := syscall.Fstat(fd, &st); err != nil {
+		syscall.Close(fd)
+		return nil, nil, 0, fs.ToErrno(err)
+	}
+
+	node := n.LoopbackNode.RootData.NewNode_(n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, n.RootData.IdFromStat(&st))
+	lf := NewLoopbackFile(fd, name, &n.LoopbackNode)
+
+	out.FromStat(&st)
+	return ch, lf, 0, 0
+}
 
 func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
 	f.mu.Lock()
@@ -115,28 +127,20 @@ func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32,
 	pid := caller.Pid
 	ext := strings.Split(f.name, ".")[1]
 	entropy := GetEntropy(data)
-	dt := time.Now().String()
+	dt := time.Now().Unix() - initialTimestamp
 
 	jsonDump := JsonDump{
-		Pid:     pid,
-		Entropy: entropy,
-		Op:      "write",
-		Ext:     ext,
-		Time:    dt,
+		Pid:       pid,
+		Entropy:   entropy,
+		Op:        "write",
+		Ext:       ext,
+		Timestamp: dt,
 	}
-
 	log.Println(jsonDump)
 
 	defer f.mu.Unlock()
-	if isMalicious() == true {
-		// var empty []byte
-		// bytesRead, _ := os.ReadFile(f.name)
-		// n, err := syscall.Pwrite(f.Fd, bytesRead, off)
-		return uint32(40), 0
-	} else {
-		n, err := syscall.Pwrite(f.Fd, data, off)
-		return uint32(n), fs.ToErrno(err)
-	}
+	n, err := syscall.Pwrite(f.Fd, data, off)
+	return uint32(n), fs.ToErrno(err)
 }
 
 func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.ReadResult, errno syscall.Errno) {
@@ -145,14 +149,18 @@ func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.
 	caller, _ := fuse.FromContext(ctx)
 	pid := caller.Pid
 	ext := strings.Split(f.name, ".")[1]
-	dt := time.Now().String()
+	if isMalicious() {
+		f.node.Rename(ctx, f.name, f.parentNode, "_"+f.name, 0)
+	}
+
+	dt := time.Now().Unix() - initialTimestamp
 
 	jsonDump := JsonDump{
-		Pid:     pid,
-		Entropy: "null",
-		Op:      "read",
-		Ext:     ext,
-		Time:    dt,
+		Pid:       pid,
+		Entropy:   -1.0,
+		Op:        "read",
+		Ext:       ext,
+		Timestamp: dt,
 	}
 
 	log.Println(jsonDump)
@@ -190,9 +198,9 @@ func (n *RenameNode) path() string {
 }
 
 func main() {
-	go changeLogFile()
+	changeLogFile()
 
-	path := os.Getenv("HOME") + "/Desktop"
+	path := "/home/bobo/FTP/"
 	rootData := &fs.LoopbackRoot{
 		NewNode: newRenameNode,
 		Path:    "./filesystem_dir",
@@ -204,7 +212,7 @@ func main() {
 		EntryTimeout: &sec,
 	}
 
-	opts.MountOptions.Options = append(opts.MountOptions.Options, "fsname=renameFS")
+	opts.MountOptions.Options = append(opts.MountOptions.Options, "allow_other", "fsname=renameFS")
 	opts.MountOptions.Name = "renameFS"
 	opts.NullPermissions = true
 

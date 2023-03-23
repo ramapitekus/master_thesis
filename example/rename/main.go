@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -85,10 +84,10 @@ func (n *RenameNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, 
 }
 
 func main() {
-	path := os.Getenv("HOME") + "/Desktop"
+	path := "/home/bobo/FTP"
 	rootData := &fs.LoopbackRoot{
 		NewNode: newRenameNode,
-		Path:    "./",
+		Path:    "../empty_write/filesystem_dir",
 	}
 
 	sec := time.Second
