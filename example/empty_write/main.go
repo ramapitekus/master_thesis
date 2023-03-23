@@ -18,6 +18,7 @@ import (
 )
 
 var MTDType = "rename"
+var evaluateMTD = false
 var initialTimestamp = time.Now().Unix()
 
 type RenameNode struct {
@@ -27,7 +28,7 @@ type RenameNode struct {
 
 type Status int32
 
-type JsonDump struct {
+type CsvDump struct {
 	Pid       uint32
 	Entropy   any
 	Op        string
@@ -35,12 +36,8 @@ type JsonDump struct {
 	Timestamp int64
 }
 
-func (m JsonDump) String() string {
+func (m CsvDump) String() string {
 	return fmt.Sprintf("%d,%f,%s,%s,%d", m.Pid, m.Entropy, m.Op, m.Ext, m.Timestamp)
-}
-
-type JsonRecords struct {
-	JsonDumps []JsonDump `json:"Ops"`
 }
 
 type RenameFile struct {
@@ -61,15 +58,20 @@ func setLogFile(num int) {
 	log.Println("pid,entropy,op,ext,timestamp")
 }
 
+// In case we are evaluating in real settings, we create a new csv file every 10s
+// Every csv file will be classified with non-malicious/malicious
 func changeLogFile() {
 	setLogFile(0)
-	//interval := time.Duration(20) * time.Second
-	//ticker := time.NewTicker(interval)
-	//numLog := 1
-	//for range ticker.C {
-	//	setLogFile(numLog)
-	//	numLog++
-	//}
+
+	if evaluateMTD {
+		interval := time.Duration(10) * time.Second
+		ticker := time.NewTicker(interval)
+		numLog := 1
+		for range ticker.C {
+			setLogFile(numLog)
+			numLog++
+		}
+	}
 }
 
 func isMalicious() bool {
@@ -129,14 +131,14 @@ func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32,
 	entropy := GetEntropy(data)
 	dt := time.Now().Unix() - initialTimestamp
 
-	jsonDump := JsonDump{
+	CsvDump := CsvDump{
 		Pid:       pid,
 		Entropy:   entropy,
 		Op:        "write",
 		Ext:       ext,
 		Timestamp: dt,
 	}
-	log.Println(jsonDump)
+	log.Println(CsvDump)
 
 	defer f.mu.Unlock()
 	n, err := syscall.Pwrite(f.Fd, data, off)
@@ -155,7 +157,7 @@ func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.
 
 	dt := time.Now().Unix() - initialTimestamp
 
-	jsonDump := JsonDump{
+	CsvDump := CsvDump{
 		Pid:       pid,
 		Entropy:   -1.0,
 		Op:        "read",
@@ -163,7 +165,7 @@ func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.
 		Timestamp: dt,
 	}
 
-	log.Println(jsonDump)
+	log.Println(CsvDump)
 
 	r := fuse.ReadResultFd(uintptr(f.Fd), off, len(buf))
 	return r, fs.OK
@@ -199,8 +201,7 @@ func (n *RenameNode) path() string {
 
 func main() {
 	changeLogFile()
-
-	path := "/home/bobo/FTP/"
+	mountPoint := "home/bobo/FTP" // Change the path to the desired mountpoint
 	rootData := &fs.LoopbackRoot{
 		NewNode: newRenameNode,
 		Path:    "./filesystem_dir",
@@ -216,7 +217,7 @@ func main() {
 	opts.MountOptions.Name = "renameFS"
 	opts.NullPermissions = true
 
-	server, err := fs.Mount(path, newRenameNode(rootData, nil, "root", nil), opts)
+	server, err := fs.Mount(mountPoint, newRenameNode(rootData, nil, "root", nil), opts)
 	if err != nil {
 		log.Fatalf("Mount fail: %v\n", err)
 	}
