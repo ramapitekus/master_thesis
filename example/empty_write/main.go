@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -24,6 +25,43 @@ var initialTimestamp = time.Now().Unix()
 type RenameNode struct {
 	fs.LoopbackNode
 	Name string
+}
+
+func watchChanges(channel *chan bool) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	defer watcher.Close()
+
+	err = watcher.Add("./classifier.log")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	go func() {
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					*channel <- true
+					return
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				fmt.Println("Error:", err)
+			}
+		}
+	}()
+
+	<-make(chan struct{})
 }
 
 type Status int32
@@ -46,6 +84,11 @@ type RenameFile struct {
 	name       string
 	node       *fs.LoopbackNode
 	parentNode *fs.Inode
+	buffer     chan []byte
+	chanWrite  chan bool
+	off        int64
+	offBuffer  chan int64
+	registered bool
 }
 
 func setLogFile(num int) {
@@ -74,13 +117,17 @@ func changeLogFile() {
 	}
 }
 
-func isMalicious() bool {
+func isMalicious() (bool, error) {
+	time.Sleep(200 * time.Millisecond)
 	classifier, err := os.ReadFile("classifier.log")
 	if err != nil {
-		fmt.Println(err)
+		return false, err
 	}
-	classifierBool, _ := strconv.ParseBool(string(classifier))
-	return classifierBool
+	classifierBool, err := strconv.ParseBool(string(classifier))
+	if err != nil {
+		return false, err
+	}
+	return classifierBool, nil
 }
 
 func NewLoopbackFile(fd int, name string, node *fs.LoopbackNode) fs.FileHandle {
@@ -93,12 +140,16 @@ func NewLoopbackFile(fd int, name string, node *fs.LoopbackNode) fs.FileHandle {
 		name:       name,
 		node:       node,
 		parentNode: parentNode,
+		buffer:     make(chan []byte, 100),
+		offBuffer:  make(chan int64, 100),
+		chanWrite:  make(chan bool),
 	}
 }
 
 var _ = (fs.NodeOpener)((*RenameNode)(nil))
 var _ = (fs.NodeCreater)((*RenameNode)(nil))
 var _ = (fs.FileReader)((*RenameFile)(nil))
+var _ = (fs.FileReleaser)((*RenameFile)(nil))
 var _ = (fs.FileWriter)((*RenameFile)(nil))
 
 func (n *RenameNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (inode *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
@@ -124,7 +175,6 @@ func (n *RenameNode) Create(ctx context.Context, name string, flags uint32, mode
 }
 
 func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
-	f.mu.Lock()
 	caller, _ := fuse.FromContext(ctx)
 	pid := caller.Pid
 	ext := strings.Split(f.name, ".")[1]
@@ -140,9 +190,27 @@ func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32,
 	}
 	log.Println(CsvDump)
 
+	f.buffer <- data
+	f.offBuffer <- off
+	channel := make(chan bool)
+	go watchChanges(&channel)
+	return f.flush(ctx, channel)
+}
+
+func (f *RenameFile) flush(ctx context.Context, channel chan bool) (uint32, syscall.Errno) {
+	<-channel
+
+	malicious, err := isMalicious()
+	if err != nil {
+		panic(err)
+	}
+	f.mu.Lock()
 	defer f.mu.Unlock()
-	n, err := syscall.Pwrite(f.Fd, data, off)
-	return uint32(n), fs.ToErrno(err)
+	if !malicious {
+		return f.LoopbackFile.Write(ctx, <-f.buffer, <-f.offBuffer)
+	} else {
+		return 0, 0
+	}
 }
 
 func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.ReadResult, errno syscall.Errno) {
@@ -151,9 +219,6 @@ func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.
 	caller, _ := fuse.FromContext(ctx)
 	pid := caller.Pid
 	ext := strings.Split(f.name, ".")[1]
-	if isMalicious() {
-		f.node.Rename(ctx, f.name, f.parentNode, "_"+f.name, 0)
-	}
 
 	dt := time.Now().Unix() - initialTimestamp
 
@@ -201,7 +266,7 @@ func (n *RenameNode) path() string {
 
 func main() {
 	changeLogFile()
-	mountPoint := "home/bobo/FTP" // Change the path to the desired mountpoint
+	mountPoint := "/home/bobo/FTP" // Change the path to the desired mountpoint
 	rootData := &fs.LoopbackRoot{
 		NewNode: newRenameNode,
 		Path:    "./filesystem_dir",
