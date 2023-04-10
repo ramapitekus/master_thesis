@@ -35,7 +35,8 @@ LOW_ENTROPY_EXTENSIONS = [
 ]
 
 LOG_PATH = "../rename_fs/logs/classifier.log"
-MODEL_PATH = "./models/IsolationForest.model"
+# MODEL_PATH = "./models/IsolationForest.model"
+MODEL_PATH = "./models/model_group_by_id_isolation_forest.model"
 CSV_PATH = "../rename_fs/logs/logfile0.csv"
 
 clf = pickle.load(open(MODEL_PATH, "rb"))

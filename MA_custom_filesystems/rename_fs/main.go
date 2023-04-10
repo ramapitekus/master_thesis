@@ -16,7 +16,8 @@ import (
 )
 
 var MTDType = "rename"
-var evaluateMTD = false
+var logPath = "../logs/logfile%d.csv"
+var evaluateMTD = true
 var initialTimestamp = time.Now().Unix()
 
 type RenameNode struct {
@@ -31,11 +32,12 @@ type CsvDump struct {
 	Entropy   float64
 	Op        string
 	Ext       string
+	Name      string
 	Timestamp int64
 }
 
 func (m CsvDump) String() string {
-	return fmt.Sprintf("%d,%f,%s,%s,%d", m.Pid, m.Entropy, m.Op, m.Ext, m.Timestamp)
+	return fmt.Sprintf("%d,%f,%s,%s,%s,%d", m.Pid, m.Entropy, m.Op, m.Ext, m.Name, m.Timestamp)
 }
 
 type RenameFile struct {
@@ -47,13 +49,13 @@ type RenameFile struct {
 }
 
 func setLogFile(num int) {
-	file, err := os.OpenFile(fmt.Sprintf("./logs/logfile%d.csv", num), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	file, err := os.OpenFile(fmt.Sprintf(logPath, num), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.SetFlags(0)
 	log.SetOutput(file)
-	log.Println("pid,entropy,op,ext,timestamp")
+	log.Println("pid,entropy,op,ext,filename,timestamp")
 }
 
 // In case we are evaluating in real settings, we create a new csv file every 10s
@@ -126,6 +128,7 @@ func (f *RenameFile) Write(ctx context.Context, data []byte, off int64) (uint32,
 		Entropy:   entropy,
 		Op:        "write",
 		Ext:       ext,
+		Name:      f.name,
 		Timestamp: dt,
 	}
 	log.Println(CsvDump)
@@ -151,6 +154,7 @@ func (f *RenameFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.
 		Entropy:   -1.0,
 		Op:        "read",
 		Ext:       ext,
+		Name:      f.name,
 		Timestamp: dt,
 	}
 
@@ -189,11 +193,11 @@ func (n *RenameNode) path() string {
 }
 
 func main() {
-	changeLogFile()
-	mountPoint := "/home/bobo/FTP" // Change the path to the desired mountpoint
+	go changeLogFile()
+	mountPoint := "/home/benign_collection_user/FTP/" // Change the path to the desired mountpoint
 	rootData := &fs.LoopbackRoot{
 		NewNode: newRenameNode,
-		Path:    "./filesystem_dir",
+		Path:    "../filesystem_dir",
 	}
 
 	sec := time.Second

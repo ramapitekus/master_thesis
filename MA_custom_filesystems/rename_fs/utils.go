@@ -8,7 +8,7 @@ import (
 )
 
 func isMalicious() bool {
-	classifier, err := os.ReadFile("./logs/classifier.log")
+	classifier, err := os.ReadFile("../logs/classifier.log")
 	if err != nil {
 		fmt.Println(err)
 	}
