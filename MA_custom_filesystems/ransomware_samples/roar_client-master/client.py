@@ -13,7 +13,7 @@ TARGET_PATH = "<start-path-on-target-device>"
 
 def listen_for_config_changes():
     with socket(AF_INET, SOCK_STREAM) as sock:
-        sock.bind(("0.0.0.0", 42666))
+        sock.bind(("0.0.0.0", 42667))
         sock.listen(1)
 
         while True:
@@ -58,7 +58,8 @@ if __name__ == "__main__":
         sleep(1)
 
     try:
-        run(encrypt=True, absolute_paths=TARGET_PATH)
+        print("encryption starting..")
+        run(encrypt=True, absolute_paths=None)
     finally:
         print("finally")
         for proc in procs:

