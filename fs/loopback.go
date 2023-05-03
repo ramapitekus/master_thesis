@@ -30,7 +30,7 @@ type LoopbackRoot struct {
 	NewNode func(rootData *LoopbackRoot, parent *Inode, name string, st *syscall.Stat_t) InodeEmbedder
 }
 
-func (r *LoopbackRoot) newNode(parent *Inode, name string, st *syscall.Stat_t) InodeEmbedder {
+func (r *LoopbackRoot) NewNode_(parent *Inode, name string, st *syscall.Stat_t) InodeEmbedder {
 	if r.NewNode != nil {
 		return r.NewNode(r, parent, name, st)
 	}
@@ -39,7 +39,7 @@ func (r *LoopbackRoot) newNode(parent *Inode, name string, st *syscall.Stat_t) I
 	}
 }
 
-func (r *LoopbackRoot) idFromStat(st *syscall.Stat_t) StableAttr {
+func (r *LoopbackRoot) IdFromStat(st *syscall.Stat_t) StableAttr {
 	// We compose an inode number by the underlying inode, and
 	// mixing in the device number. In traditional filesystems,
 	// the inode numbers are small. The device numbers are also
@@ -117,14 +117,14 @@ func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryO
 	}
 
 	out.Attr.FromStat(&st)
-	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
-	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
+	node := n.RootData.NewNode_(n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, n.RootData.IdFromStat(&st))
 	return ch, 0
 }
 
-// preserveOwner sets uid and gid of `path` according to the caller information
+// PreserveOwner sets uid and gid of `path` according to the caller information
 // in `ctx`.
-func (n *LoopbackNode) preserveOwner(ctx context.Context, path string) error {
+func (n *LoopbackNode) PreserveOwner(ctx context.Context, path string) error {
 	if os.Getuid() != 0 {
 		return nil
 	}
@@ -141,7 +141,7 @@ func (n *LoopbackNode) Mknod(ctx context.Context, name string, mode, rdev uint32
 	if err != nil {
 		return nil, ToErrno(err)
 	}
-	n.preserveOwner(ctx, p)
+	n.PreserveOwner(ctx, p)
 	st := syscall.Stat_t{}
 	if err := syscall.Lstat(p, &st); err != nil {
 		syscall.Rmdir(p)
@@ -150,8 +150,8 @@ func (n *LoopbackNode) Mknod(ctx context.Context, name string, mode, rdev uint32
 
 	out.Attr.FromStat(&st)
 
-	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
-	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
+	node := n.RootData.NewNode_(n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, n.RootData.IdFromStat(&st))
 
 	return ch, 0
 }
@@ -162,7 +162,7 @@ func (n *LoopbackNode) Mkdir(ctx context.Context, name string, mode uint32, out 
 	if err != nil {
 		return nil, ToErrno(err)
 	}
-	n.preserveOwner(ctx, p)
+	n.PreserveOwner(ctx, p)
 	st := syscall.Stat_t{}
 	if err := syscall.Lstat(p, &st); err != nil {
 		syscall.Rmdir(p)
@@ -171,8 +171,8 @@ func (n *LoopbackNode) Mkdir(ctx context.Context, name string, mode uint32, out 
 
 	out.Attr.FromStat(&st)
 
-	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
-	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
+	node := n.RootData.NewNode_(n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, n.RootData.IdFromStat(&st))
 
 	return ch, 0
 }
@@ -209,15 +209,15 @@ func (n *LoopbackNode) Create(ctx context.Context, name string, flags uint32, mo
 	if err != nil {
 		return nil, nil, 0, ToErrno(err)
 	}
-	n.preserveOwner(ctx, p)
+	n.PreserveOwner(ctx, p)
 	st := syscall.Stat_t{}
 	if err := syscall.Fstat(fd, &st); err != nil {
 		syscall.Close(fd)
 		return nil, nil, 0, ToErrno(err)
 	}
 
-	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
-	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
+	node := n.RootData.NewNode_(n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, n.RootData.IdFromStat(&st))
 	lf := NewLoopbackFile(fd)
 
 	out.FromStat(&st)
@@ -230,14 +230,14 @@ func (n *LoopbackNode) Symlink(ctx context.Context, target, name string, out *fu
 	if err != nil {
 		return nil, ToErrno(err)
 	}
-	n.preserveOwner(ctx, p)
+	n.PreserveOwner(ctx, p)
 	st := syscall.Stat_t{}
 	if err := syscall.Lstat(p, &st); err != nil {
 		syscall.Unlink(p)
 		return nil, ToErrno(err)
 	}
-	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
-	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
+	node := n.RootData.NewNode_(n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, n.RootData.IdFromStat(&st))
 
 	out.Attr.FromStat(&st)
 	return ch, 0
@@ -255,8 +255,8 @@ func (n *LoopbackNode) Link(ctx context.Context, target InodeEmbedder, name stri
 		syscall.Unlink(p)
 		return nil, ToErrno(err)
 	}
-	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
-	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
+	node := n.RootData.NewNode_(n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, n.RootData.IdFromStat(&st))
 
 	out.Attr.FromStat(&st)
 	return ch, 0
@@ -412,5 +412,5 @@ func NewLoopbackRoot(rootPath string) (InodeEmbedder, error) {
 		Dev:  uint64(st.Dev),
 	}
 
-	return root.newNode(nil, "", &st), nil
+	return root.NewNode_(nil, "", &st), nil
 }
