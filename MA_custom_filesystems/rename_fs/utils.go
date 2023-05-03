@@ -16,6 +16,9 @@ func isMalicious() bool {
 	return classifierBool
 }
 
+
+// This is a Go re-implementation of entropy calculation from the following page: 
+// https://cocomelonc.github.io/malware/2022/11/05/malware-analysis-6.html
 func GetEntropy(data []byte) (entr float64) {
 	possible := make(map[string]int)
 
